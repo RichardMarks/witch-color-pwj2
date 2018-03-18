@@ -7,6 +7,7 @@
 #include <SDL2/SDL.h>
 #include <SDL_image.h>
 #include <SDL_ttf.h>
+#include <SDL_mixer.h>
 
 extern SDL_Window* mainWindowPtr;
 extern SDL_Renderer* mainRendererPtr;
@@ -68,8 +69,12 @@ extern void destroy_game();
 /* asset loaders */
 extern SDL_Texture* load_texture(char* filename);
 extern TTF_Font* load_font(char* filename, int fontSize);
+extern Mix_Music* load_music(char* filename);
+extern Mix_Chunk* load_sfx(char* filename);
 
 #define kill_texture(t){if(t){SDL_DestroyTexture(t);t=0;}}
 #define kill_font(f){if(f){TTF_CloseFont(f);f=0;}}
+#define kill_music(m){if(m){Mix_FreeMusic(m);m=0;}}
+#define kill_sfx(s){if(s){Mix_FreeChunk(s);s=0;}}
 
 #endif

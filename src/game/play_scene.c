@@ -40,6 +40,13 @@
   + click on volume speaker icon to toggle audio on / off
  */
 
+Mix_Music* bgm = 0;
+Mix_Chunk* sfxWitchMove = 0;
+Mix_Chunk* sfxMixFailed = 0;
+Mix_Chunk* sfxMixSuccess = 0;
+Mix_Chunk* sfxMenuClick = 0;
+Mix_Chunk* sfxPourPotion = 0;
+
 SDL_Texture* bgTexture = 0;
 SDL_Texture* spellbookTexture = 0;
 SDL_Texture* cauldronTexture = 0;
@@ -156,25 +163,49 @@ Sprite* selectionSprite = 0;
 void mute_audio () {
   audioSprite->state = AUDIO_MUTED;
   audioSprite->texture = audioMutedTexture;
-  printf("TODO: mute audio\n");
+  Mix_PauseMusic();
+  Mix_Pause(-1);
 }
 
 void unmute_audio () {
   audioSprite->state = AUDIO_UNMUTED;
   audioSprite->texture = audioUnmutedTexture;
-  printf("TODO: unmute audio\n");
+  Mix_ResumeMusic();
+  Mix_Resume(-1);
+}
+
+void play_sfx(Mix_Chunk* sfx, float volume);
+void play_sfx(Mix_Chunk* sfx, float volume) {
+  if (audioSprite->state == AUDIO_MUTED) {
+    return;
+  }
+
+  int sfxChannel = Mix_PlayChannel(-1, sfx, 0);
+  if (sfxChannel == -1) {
+    SDL_Log("Error occurred in play_sfx()\nUnable to play sample: %s\n", Mix_GetError());
+    return;
+  }
+  int sfxVolume = (int)(128.0f * volume);
+  Mix_Volume(sfxChannel, sfxVolume);
 }
 
 void init_play_scene() {
-  bgTexture = load_texture("../data/backgrounds/bg.png");
-  spellbookTexture = load_texture("../data/sprites/spellbook.png");
-  cauldronTexture = load_texture("../data/sprites/cauldron.png");
+  bgm = load_music("../data/audio/mixing_bgm.ogg");
+  sfxWitchMove = load_sfx("../data/audio/witch_move.ogg");
+  sfxMixFailed = load_sfx("../data/audio/mix_failed.ogg");
+  sfxMixSuccess = load_sfx("../data/audio/mix_success.ogg");
+  sfxMenuClick = load_sfx("../data/audio/menu_click.ogg");
+  sfxPourPotion = load_sfx("../data/audio/pour.ogg");
+
+  bgTexture = load_texture("../data/backgrounds/Room.png");
+  spellbookTexture = load_texture("../data/sprites/Book.png");
+  cauldronTexture = load_texture("../data/sprites/CauldronEmpty.png");
   witchTexture = load_texture("../data/sprites/witch.png");
-  potionTexture1 = load_texture("../data/sprites/potion.png");
-  potionTexture2 = load_texture("../data/sprites/potion.png");
-  potionTexture3 = load_texture("../data/sprites/potion.png");
-  potionTexture4 = load_texture("../data/sprites/potion.png");
-  potionTexture5 = load_texture("../data/sprites/potion.png");
+  potionTexture1 = load_texture("../data/sprites/BottleEmpty.png");
+  potionTexture2 = load_texture("../data/sprites/BottleEmpty.png");
+  potionTexture3 = load_texture("../data/sprites/BottleEmpty.png");
+  potionTexture4 = load_texture("../data/sprites/BottleEmpty.png");
+  potionTexture5 = load_texture("../data/sprites/BottleEmpty.png");
   selectionTexture = load_texture("../data/ui/selection.png");
   menuButtonTexture = load_texture("../data/ui/menu_button.png");
   audioMutedTexture = load_texture("../data/ui/audio_muted.png");
@@ -200,6 +231,7 @@ void init_play_scene() {
 }
 
 void destroy_play_scene() {
+  kill_music(bgm);
   kill_texture(bgTexture);
   kill_texture(spellbookTexture);
   kill_texture(cauldronTexture);
@@ -213,6 +245,11 @@ void destroy_play_scene() {
   kill_texture(menuButtonTexture);
   kill_texture(audioMutedTexture);
   kill_texture(audioUnmutedTexture);
+  kill_sfx(sfxWitchMove);
+  kill_sfx(sfxMixFailed);
+  kill_sfx(sfxMixSuccess);
+  kill_sfx(sfxMenuClick);
+  kill_sfx(sfxPourPotion);
 }
 
 void enter_play_scene() {
@@ -259,6 +296,15 @@ void enter_play_scene() {
 
   Potion* cauldronPotion = allPotions[cauldronColor];
   SDL_SetTextureColorMod(cauldronSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+
+  // start bgm
+  // if (Mix_PlayMusic(bgm, -1) < 0) {
+  int bgmVolume = (int)(0.25f * 128.0f);
+  Mix_VolumeMusic(bgmVolume);
+  if (Mix_FadeInMusic(bgm, -1, 500) < 0) {
+    printf("Error occurred in enter_play_scene()\nUnable to play BGM\n");
+    return;
+  }
 }
 
 void exit_play_scene() {
@@ -282,6 +328,7 @@ void update_play_scene(float dt) {
 
         // move witch in front of potion
         witchSprite->x = mouse->x - (witchSprite->src.w / 2);
+        play_sfx(sfxWitchMove, 0.25f);
 
         // make or break selection
         if (selectedPotionIndex == i) {
@@ -359,6 +406,7 @@ void update_play_scene(float dt) {
     // clicked on menu button?
     if (Sprite__collides_with_point(menuButtonSprite, mouse->x, mouse->y)) {
       printf("TODO: show pause menu\n");
+      play_sfx(sfxMenuClick, 0.5f);
     }
 
     // clicked on audio toggle?

@@ -55,11 +55,27 @@ int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine) {
     return -1;
   }
 
-  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+  // SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
   SDL_RenderSetLogicalSize(mainRendererPtr, SCREEN_WIDTH, SCREEN_HEIGHT);
   SDL_MaximizeWindow(mainWindowPtr);
 
   currentGamePtr = gamePtr;
+
+  int audioHz = 22050;
+  unsigned short audioFormat = MIX_DEFAULT_FORMAT; // AUDIO_S16SYS
+  int audioChannels = 2; // STEREO
+  int audioChunkSize = 4096;
+  if (Mix_OpenAudio(audioHz, audioFormat, audioChannels, audioChunkSize) == -1) {
+    SDL_Log("Error occurred in init_game()\nUnable to open SDL mixer: %s\n", Mix_GetError());
+    return -1;
+  }
+
+  int audioFlags = MIX_INIT_OGG;
+  int audioInit = Mix_Init(audioFlags);
+  if ((audioInit & audioFlags) != audioFlags) {
+    SDL_Log("Error occurred in init_game()\nUnable to init SDL mixer: %s\n", Mix_GetError());
+    return -1;
+  }
 
   /* do your initialization here */
   init_play_scene();

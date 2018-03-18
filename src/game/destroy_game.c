@@ -9,6 +9,11 @@ void destroy_game() {
     return;
   }
 
+  Mix_CloseAudio();
+  while (Mix_Init(0)) {
+    Mix_Quit();
+  }
+
   /* do your game cleanup here */
   destroy_play_scene();
 
