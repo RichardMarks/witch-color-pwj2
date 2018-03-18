@@ -49,6 +49,9 @@ SDL_Texture* bookTargetTexture = 0;
 SDL_Texture* cauldronFillTexture = 0;
 SDL_Texture* potionBottleTexture = 0;
 
+SDL_Texture* magicCircleTexture = 0;
+SDL_Texture* magicCircleBlurTexture = 0;
+
 #define SPRITE_VISIBLE 0x00
 #define SPRITE_HIDDEN 0xFF
 
@@ -114,6 +117,7 @@ Potion bouquetPotion = BOUQUET_POTION;
 Potion cretePotion = CRETE_POTION;
 
 Potion* basePotions[] = {
+  0,
   &bluePotion,
   &yellowPotion,
   &pinkPotion,
@@ -124,6 +128,7 @@ Potion* basePotions[] = {
 };
 
 Potion* allPotions[] = {
+  0,
   &bluePotion,
   &yellowPotion,
   &pinkPotion,
@@ -163,6 +168,7 @@ Potion* allPotions[] = {
 };
 
 int startingCauldronColors[] = {
+  0,
   BLUE,
   YELLOW,
   PINK,
@@ -171,10 +177,11 @@ int startingCauldronColors[] = {
   BLACK,
   WHITE
 };
-int startingCauldronColor = GREEN;
-int cauldronColor = GREEN;
+int startingCauldronColor = UNUSED;
+int cauldronColor = UNUSED;
 
 int mixableColors[] = {
+  0,
   PURPLE_HEART,
   ROUGE,
   JUNGLE_GREEN,
@@ -279,6 +286,63 @@ void play_sfx(Mix_Chunk* sfx, float volume) {
   Mix_Volume(sfxChannel, sfxVolume);
 }
 
+int showMagicCircle = 0;
+float magicCircleTime = 0.0f;
+float magicCircleDuration = 1.2f;
+double magicCircleAngle = 0.0;
+double magicCircleSpeed = 45.0;
+SDL_Rect mcSrc;
+SDL_Rect mcDst;
+
+void init_magic_circle();
+void show_magic_circle(unsigned char r, unsigned char g, unsigned char b);
+void hide_magic_circle();
+void update_magic_circle(float dt);
+void render_magic_circle();
+
+void init_magic_circle() {
+  int w, h;
+  SDL_QueryTexture(magicCircleTexture, 0, 0, &w, &h);
+  mcSrc.x = 0;
+  mcSrc.y = 0;
+  mcSrc.w = w;
+  mcSrc.h = h;
+  mcDst.x = (SCREEN_WIDTH - w) / 2;
+  mcDst.y = (SCREEN_HEIGHT - h) / 2;
+  mcDst.w = w;
+  mcDst.h = h;
+  SDL_SetTextureAlphaMod(magicCircleBlurTexture, (int)(255.0f * 0.65f));
+  SDL_SetTextureAlphaMod(magicCircleTexture, (int)(255.0f * 0.65f));
+}
+void show_magic_circle(unsigned char r, unsigned char g, unsigned char b) {
+  showMagicCircle = 1;
+  magicCircleAngle = 0.0;
+  magicCircleTime = 0.0f;
+  SDL_SetTextureColorMod(magicCircleTexture, r, g, b);
+}
+void hide_magic_circle() {
+  showMagicCircle = 0;
+}
+void update_magic_circle(float dt) {
+  if (showMagicCircle) {
+    magicCircleTime += dt;
+    magicCircleAngle += magicCircleSpeed * (double)dt;
+    if (magicCircleAngle > 360.0) {
+      magicCircleAngle = 0.0;
+    }
+    if (magicCircleTime >= magicCircleDuration) {
+      hide_magic_circle();
+    }
+  }
+}
+
+void render_magic_circle() {
+  if (showMagicCircle) {
+    SDL_RenderCopyEx(mainRendererPtr, magicCircleTexture, &mcSrc, &mcDst, magicCircleAngle, 0, SDL_FLIP_NONE);
+    SDL_RenderCopyEx(mainRendererPtr, magicCircleBlurTexture, &mcSrc, &mcDst, magicCircleAngle, 0, SDL_FLIP_NONE);
+  }
+}
+
 void init_play_scene() {
   // printf("loading fonts\n");
   targetColorFont = load_font("../data/fonts/fawn.ttf", 24);
@@ -317,6 +381,11 @@ void init_play_scene() {
   bookTargetTexture = load_texture("../data/sprites/BookFill.png");
   cauldronFillTexture = load_texture("../data/sprites/CauldronFill.png");
   potionBottleTexture = load_texture("../data/sprites/BottleEmpty.png");
+
+  magicCircleTexture = load_texture("../data/sprites/magic_circle.png");
+  magicCircleBlurTexture = load_texture("../data/sprites/magic_circle_blurred.png");
+
+  SDL_SetTextureBlendMode(magicCircleBlurTexture, SDL_BLENDMODE_ADD);
 
   // printf("init text\n");
   targetColorText = Text__create(targetColorFont, 0xFFFFFFFF);
@@ -388,6 +457,8 @@ void destroy_play_scene() {
   kill_texture(bookTargetTexture);
   kill_texture(cauldronFillTexture);
   kill_texture(potionBottleTexture);
+  kill_texture(magicCircleTexture);
+  kill_texture(magicCircleBlurTexture);
   // printf("destroying sfx\n");
   kill_sfx(sfxWitchMove);
   kill_sfx(sfxMixFailed);
@@ -404,6 +475,7 @@ void destroy_play_scene() {
 }
 
 void enter_play_scene() {
+  init_magic_circle();
   // position the cauldron in the center of the screen
   cauldronSprite->x = (SCREEN_WIDTH - cauldronSprite->src.w) / 2;
   cauldronSprite->y = 222;
@@ -439,7 +511,7 @@ void enter_play_scene() {
     bottle->y = sprite->y;
 
     // initialize the potion bottles with base colors
-    Potion__init_sprite(sprite, basePotions[i]);
+    Potion__init_sprite(sprite, basePotions[i + 1]);
 
     sprite->state = BOTTLE_FULL;
   }
@@ -453,8 +525,8 @@ void enter_play_scene() {
   potionBottleSprite[6]->x = potionSprite[6]->x;
   potionBottleSprite[5]->y = potionSprite[5]->y;
   potionBottleSprite[6]->y = potionSprite[6]->y;
-  Potion__init_sprite(potionSprite[5], basePotions[5]);
-  Potion__init_sprite(potionSprite[6], basePotions[6]);
+  Potion__init_sprite(potionSprite[5], basePotions[6]);
+  Potion__init_sprite(potionSprite[6], basePotions[7]);
   potionSprite[5]->state = BOTTLE_FULL;
   potionSprite[6]->state = BOTTLE_FULL;
 
@@ -477,10 +549,8 @@ void enter_play_scene() {
   SDL_SetTextureColorMod(spellbookFillSprite->texture, bookPotion->r, bookPotion->g, bookPotion->b);
 
   // init the cauldron
-  select_starting_cauldron_color();
-
-  Potion* cauldronPotion = allPotions[cauldronColor];
-  SDL_SetTextureColorMod(cauldronFillSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+  cauldronColor = BAD_MIX;
+  cauldronFillSprite->visible = SPRITE_HIDDEN;
 
   // start bgm
   int bgmVolume = (int)(0.25f * 128.0f);
@@ -499,10 +569,10 @@ void enter_play_scene() {
   targetColorText->y = spellbookSprite->y - 40;
 
   selectedPotionText->x = SCREEN_WIDTH / 2;
-  selectedPotionText->y = SCREEN_HEIGHT - 48;
+  selectedPotionText->y = SCREEN_HEIGHT - 44;
 
   mixedColorText->x = SCREEN_WIDTH / 2;
-  mixedColorText->y = SCREEN_HEIGHT / 2;
+  mixedColorText->y = cauldronSprite->y - 32;
   // Text__set_text(targetColorText, colorNames[spellbookColor]);
   // Text__set_text(mixedColorText, colorNames[result]);
   // Text__set_text(selectedPotionText, colorNames[potion->id]);
@@ -512,10 +582,22 @@ void exit_play_scene() {
 
 }
 
+float selectionTime = 0.0f;
 int mouseDown = 0;
 void update_play_scene(float dt) {
   Input* input = &currentGamePtr->inputs;
   Mouse* mouse = &currentGamePtr->mouse;
+
+  if (selectedPotionIndex != -1) {
+    selectionTime += dt;
+    Sprite* sprite = potionSprite[selectedPotionIndex];
+    selectionSprite->x = (sprite->x + (sprite->src.w / 2)) - (selectionSprite->src.w / 2);
+    selectionSprite->y = (sprite->y + (sprite->src.h / 2)) - (selectionSprite->src.h / 2);
+    selectionSprite->x += (float)(3.0f + cos(selectionTime * 12.0f));
+    selectionSprite->y += (float)(3.0f + sin(selectionTime * 12.0f));
+  } else {
+    selectionTime = 0.0f;
+  }
 
   // Sprite* mover = cauldronSprite;
   // if (input->down) {
@@ -536,10 +618,12 @@ void update_play_scene(float dt) {
 
   if (mouse->state == SDL_PRESSED && mouseDown == 0) {
     mouseDown = 1;
+    Text__set_text(mixedColorText, "");
 
     // clicked on potion?
     for (int i = 0; i < 7; i += 1) {
       Sprite* sprite = potionSprite[i];
+      Sprite* bottle = potionBottleSprite[i];
       if (Sprite__collides_with_point(sprite, mouse->x, mouse->y)) {
         Potion* potion = sprite->data;
         printf("clicked on potion bottle %d: %s color (R 0x%02X, G 0x%02X, B 0x%02X)\n", i, colorNames[potion->id], potion->r, potion->g, potion->b);
@@ -567,7 +651,15 @@ void update_play_scene(float dt) {
           selectionSprite->x = -selectionSprite->src.w;
           selectionSprite->y = -selectionSprite->src.h;
           Text__set_text(selectedPotionText, "");
+          sprite->y += 8;
+          bottle->y += 8;
         } else {
+          if (selectedPotionIndex != -1) {
+            potionBottleSprite[selectedPotionIndex]->y += 8;
+            potionSprite[selectedPotionIndex]->y += 8;
+          }
+          sprite->y -= 8;
+          bottle->y -= 8;
           selectedPotionIndex = i;
           selectionSprite->x = (sprite->x + (sprite->src.w / 2)) - (selectionSprite->src.w / 2);
           selectionSprite->y = (sprite->y + (sprite->src.h / 2)) - (selectionSprite->src.h / 2);
@@ -584,7 +676,6 @@ void update_play_scene(float dt) {
 
     if (Sprite__collides_with_point(cauldronSprite, mouse->x, mouse->y)) {
       printf("clicked on cauldron: ");
-      Text__set_text(mixedColorText, "");
 
       if (witchSprite->texture != witchTexture2) {
         Sprite__change_texture(witchSprite, witchTexture2, 0);
@@ -593,16 +684,35 @@ void update_play_scene(float dt) {
       witchSprite->x = cauldronSprite->x + ((cauldronSprite->src.w - witchSprite->src.w) / 2);
 
       if (cauldronColor == BAD_MIX) {
-        printf("dumping failed mix from cauldron\n");
-        play_sfx(sfxPourPotion, 0.6f);
-        cauldronColor = basePotions[startingCauldronColor]->id;
-        Potion* cauldronPotion = allPotions[cauldronColor];
-        SDL_SetTextureColorMod(cauldronFillSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
-        cauldronFillSprite->visible = SPRITE_VISIBLE;
-      } else {
+        // cauldron is empty
+
         // potion selected?
         if (selectedPotionIndex != -1) {
           Sprite* selectedPotionSprite = potionSprite[selectedPotionIndex];
+          Potion* selectedPotion = (Potion*)selectedPotionSprite->data;
+          // bottle not empty?
+          if (selectedPotionSprite->state != BOTTLE_EMPTY) {
+            // fill cauldron with color
+            printf("filling cauldron with color from potion\n");
+            selectedPotionSprite->state = BOTTLE_EMPTY;
+            selectedPotionSprite->visible = SPRITE_HIDDEN;
+            play_sfx(sfxPourPotion, 0.6f);
+            cauldronColor = selectedPotion->id;
+            Potion* cauldronPotion = allPotions[cauldronColor];
+            SDL_SetTextureColorMod(cauldronFillSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+            cauldronFillSprite->visible = SPRITE_VISIBLE;
+            Text__set_text(mixedColorText, colorNames[selectedPotion->id]);
+          } else {
+            printf("bottle was empty\n");
+          }
+        }
+      } else {
+        // cauldron is not empty
+
+        // potion selected?
+        if (selectedPotionIndex != -1) {
+          Sprite* selectedPotionSprite = potionSprite[selectedPotionIndex];
+          Sprite* selectedBottleSprite = potionBottleSprite[selectedPotionIndex];
           Potion* selectedPotion = (Potion*)selectedPotionSprite->data;
 
           // is the bottle empty?
@@ -616,6 +726,7 @@ void update_play_scene(float dt) {
             selectedPotion->b = cauldronPotion->b;
             selectedPotion->id = cauldronPotion->id;
             selectedPotionSprite->visible = SPRITE_VISIBLE;
+            selectedPotionSprite->state = BOTTLE_FULL;
           } else {
             printf("adding selected potion to cauldron...\n");
             selectedPotionSprite->state = BOTTLE_EMPTY;
@@ -630,6 +741,7 @@ void update_play_scene(float dt) {
               printf("SUCCESS! Got %s\n", colorNames[result]);
 
               Text__set_text(mixedColorText, colorNames[result]);
+              show_magic_circle(cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
 
               if (result == spellbookColor) {
                 printf("\nCREATED %s! CLEARED LEVEL!\n", colorNames[result]);
@@ -647,14 +759,14 @@ void update_play_scene(float dt) {
           selectedPotionIndex = -1;
           selectionSprite->x = -selectionSprite->src.w;
           selectionSprite->y = -selectionSprite->src.h;
+          selectedPotionSprite->y += 8;
+          selectedBottleSprite->y += 8;
         } else {
           play_sfx(sfxPourPotion, 0.6f);
           // no potion selected
-          printf("resetting to starting base color\n");
-          cauldronColor = basePotions[startingCauldronColor]->id;
-          Potion* cauldronPotion = allPotions[cauldronColor];
-          SDL_SetTextureColorMod(cauldronFillSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
-          cauldronFillSprite->visible = SPRITE_VISIBLE;
+          printf("emptying cauldron\n");
+          cauldronColor = BAD_MIX;
+          cauldronFillSprite->visible = SPRITE_HIDDEN;
         }
       }
     }
@@ -693,6 +805,8 @@ void update_play_scene(float dt) {
     sprite->x += sprite->xv * dt;
     sprite->y += sprite->yv * dt;
   }
+
+  update_magic_circle(dt);
 }
 
 void render_play_scene() {
@@ -700,6 +814,8 @@ void render_play_scene() {
     Sprite* sprite = &sprites[i];
     Sprite__render(sprite);
   }
+
+  render_magic_circle();
 
   Text__render(targetColorText);
   Text__render(mixedColorText);
