@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "game.h"
+#include "scenes.h"
 
 static float epochTime() {
   return (float)SDL_GetTicks() * 0.001f;
@@ -40,6 +41,7 @@ int run_game(Game* gamePtr) {
       if (newTime - lastTime < 1) {
         deltaTime = (newTime - lastTime) * gamePtr->timeScale;
         /* update game here */
+        update_play_scene(deltaTime);
       }
       lastTime = newTime;
     }
@@ -48,6 +50,7 @@ int run_game(Game* gamePtr) {
       SDL_SetRenderDrawColor(mainRendererPtr, 0x00, 0x00, 0x00, 0xFF);
       SDL_RenderClear(mainRendererPtr);
       /* render game here */
+      render_play_scene();
       SDL_RenderPresent(mainRendererPtr);
     }
 
@@ -56,8 +59,17 @@ int run_game(Game* gamePtr) {
         quit_game();
       } else if (event.type == SDL_MOUSEBUTTONDOWN) {
         gamePtr->inputs.confirm = 1;
+        gamePtr->mouse.x = event.button.x;
+        gamePtr->mouse.y = event.button.y;
+        gamePtr->mouse.state = event.button.state;
       } else if (event.type == SDL_MOUSEBUTTONUP) {
         gamePtr->inputs.confirm = 0;
+        gamePtr->mouse.x = event.button.x;
+        gamePtr->mouse.y = event.button.y;
+        gamePtr->mouse.state = event.button.state;
+      } else if (event.type == SDL_MOUSEMOTION) {
+        gamePtr->mouse.x = event.motion.x;
+        gamePtr->mouse.y = event.motion.y;
       } else if (event.type == SDL_KEYDOWN) {
         /*
          w or up -> up

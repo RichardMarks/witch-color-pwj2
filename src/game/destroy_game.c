@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "game.h"
+#include "scenes.h"
 
 void destroy_game() {
    if (!currentGamePtr) {
@@ -9,6 +10,7 @@ void destroy_game() {
   }
 
   /* do your game cleanup here */
+  destroy_play_scene();
 
   SDL_DestroyRenderer(mainRendererPtr);
   SDL_DestroyWindow(mainWindowPtr);

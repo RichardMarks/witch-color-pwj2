@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "game.h"
+#include "scenes.h"
 
 Game* currentGamePtr = NULL;
 SDL_Window* mainWindowPtr = NULL;
@@ -18,6 +19,7 @@ int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine) {
   gamePtr->paused = 0;
   gamePtr->timeScale = 1.0f;
   memset(&gamePtr->inputs, 0, sizeof(Input));
+  memset(&gamePtr->mouse, 0, sizeof(Mouse));
 
   if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
     SDL_Log("Error occurred in init_game()\nUnable to initialize SDL2: %s", SDL_GetError());
@@ -60,6 +62,8 @@ int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine) {
   currentGamePtr = gamePtr;
 
   /* do your initialization here */
+  init_play_scene();
+  enter_play_scene();
 
 #ifndef PRODUCTION
   printf("executing init_game() -> currentGamePtr initialized.\n");

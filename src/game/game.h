@@ -1,8 +1,8 @@
 #ifndef GAME_H
 #define GAME_H
 
-#define SCREEN_WIDTH 1080
-#define SCREEN_HEIGHT 1920
+#define SCREEN_WIDTH 270
+#define SCREEN_HEIGHT 480
 
 #include <SDL2/SDL.h>
 #include <SDL_image.h>
@@ -29,6 +29,12 @@ typedef struct t_Input {
   unsigned char padding;
 } Input;
 
+typedef struct t_Mouse {
+  int x;
+  int y;
+  unsigned char state;
+} Mouse;
+
 /*
   a simple structure to hold game-related information
 */
@@ -46,6 +52,7 @@ typedef struct Game {
   float timeScale;
 
   Input inputs;
+  Mouse mouse;
 } Game;
 
 /*
@@ -57,5 +64,12 @@ extern Game* currentGamePtr;
 extern int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine);
 extern int run_game(Game* gamePtr);
 extern void destroy_game();
+
+/* asset loaders */
+extern SDL_Texture* load_texture(char* filename);
+extern TTF_Font* load_font(char* filename, int fontSize);
+
+#define kill_texture(t){if(t){SDL_DestroyTexture(t);t=0;}}
+#define kill_font(f){if(f){TTF_CloseFont(f);f=0;}}
 
 #endif
