@@ -65,6 +65,15 @@ SDL_Texture* menuButtonTexture = 0;
 SDL_Texture* audioMutedTexture = 0;
 SDL_Texture* audioUnmutedTexture = 0;
 
+SDL_Texture* bookTableTexture = 0;
+SDL_Texture* potionTableTexture = 0;
+SDL_Texture* bookTargetTexture = 0;
+SDL_Texture* cauldronFillTexture = 0;
+SDL_Texture* potionBottleTexture = 0;
+
+#define SPRITE_VISIBLE 0x00
+#define SPRITE_HIDDEN 0xFF
+
 typedef struct t_Sprite {
   float x;
   float y;
@@ -74,6 +83,7 @@ typedef struct t_Sprite {
   int state;
   SDL_Texture* texture;
   SDL_Rect src;
+  unsigned char visible;
 } Sprite;
 
 typedef struct t_Potion {
@@ -160,6 +170,13 @@ Sprite* spellbookSprite = 0;
 Sprite* potionSprite[] = { 0, 0, 0, 0, 0 };
 Sprite* selectionSprite = 0;
 
+Sprite* spellbookFillSprite = 0;
+Sprite* cauldronFillSprite = 0;
+Sprite* bookTableSprite = 0;
+Sprite* potionTableSprite = 0;
+
+Sprite* potionBottleSprite[] = { 0, 0, 0, 0, 0 };
+
 void mute_audio () {
   audioSprite->state = AUDIO_MUTED;
   audioSprite->texture = audioMutedTexture;
@@ -201,22 +218,41 @@ void init_play_scene() {
   spellbookTexture = load_texture("../data/sprites/Book.png");
   cauldronTexture = load_texture("../data/sprites/CauldronEmpty.png");
   witchTexture = load_texture("../data/sprites/witch.png");
-  potionTexture1 = load_texture("../data/sprites/BottleEmpty.png");
-  potionTexture2 = load_texture("../data/sprites/BottleEmpty.png");
-  potionTexture3 = load_texture("../data/sprites/BottleEmpty.png");
-  potionTexture4 = load_texture("../data/sprites/BottleEmpty.png");
-  potionTexture5 = load_texture("../data/sprites/BottleEmpty.png");
+  potionTexture1 = load_texture("../data/sprites/BottleFill.png");
+  potionTexture2 = load_texture("../data/sprites/BottleFill.png");
+  potionTexture3 = load_texture("../data/sprites/BottleFill.png");
+  potionTexture4 = load_texture("../data/sprites/BottleFill.png");
+  potionTexture5 = load_texture("../data/sprites/BottleFill.png");
   selectionTexture = load_texture("../data/ui/selection.png");
   menuButtonTexture = load_texture("../data/ui/menu_button.png");
   audioMutedTexture = load_texture("../data/ui/audio_muted.png");
   audioUnmutedTexture = load_texture("../data/ui/audio_unmuted.png");
+  bookTableTexture = load_texture("../data/sprites/Potiontable.png");
+  potionTableTexture = load_texture("../data/sprites/Potiontable.png");
+  bookTargetTexture = load_texture("../data/sprites/BookFill.png");
+  cauldronFillTexture = load_texture("../data/sprites/CauldronFill.png");
+  potionBottleTexture = load_texture("../data/sprites/BottleEmpty.png");
 
   // initialize sprites
   numSprites = 0;
   Sprite__init(&sprites[numSprites], bgTexture, 0); numSprites += 1;
+
+  bookTableSprite = Sprite__init(&sprites[numSprites], potionTableTexture, 0); numSprites += 1;
   spellbookSprite = Sprite__init(&sprites[numSprites], spellbookTexture, 0); numSprites += 1;
+  spellbookFillSprite = Sprite__init(&sprites[numSprites], bookTargetTexture, 0); numSprites += 1;
+
   cauldronSprite = Sprite__init(&sprites[numSprites], cauldronTexture, 0); numSprites += 1;
+  cauldronFillSprite = Sprite__init(&sprites[numSprites], cauldronFillTexture, 0); numSprites += 1;
+
   witchSprite = Sprite__init(&sprites[numSprites], witchTexture, 0); numSprites += 1;
+
+  potionTableSprite = Sprite__init(&sprites[numSprites], potionTableTexture, 0); numSprites += 1;
+
+  potionBottleSprite[0] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
+  potionBottleSprite[1] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
+  potionBottleSprite[2] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
+  potionBottleSprite[3] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
+  potionBottleSprite[4] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
 
   potionSprite[0] = Sprite__init(&sprites[numSprites], potionTexture1, 0); numSprites += 1;
   potionSprite[1] = Sprite__init(&sprites[numSprites], potionTexture2, 0); numSprites += 1;
@@ -245,6 +281,11 @@ void destroy_play_scene() {
   kill_texture(menuButtonTexture);
   kill_texture(audioMutedTexture);
   kill_texture(audioUnmutedTexture);
+  kill_texture(bookTableTexture);
+  kill_texture(potionTableTexture);
+  kill_texture(bookTargetTexture);
+  kill_texture(cauldronFillTexture);
+  kill_texture(potionBottleTexture);
   kill_sfx(sfxWitchMove);
   kill_sfx(sfxMixFailed);
   kill_sfx(sfxMixSuccess);
@@ -255,21 +296,37 @@ void destroy_play_scene() {
 void enter_play_scene() {
   // position the cauldron in the center of the screen
   cauldronSprite->x = (SCREEN_WIDTH - cauldronSprite->src.w) / 2;
-  cauldronSprite->y = (SCREEN_HEIGHT - cauldronSprite->src.h) / 2;
+  cauldronSprite->y = 222;
+  cauldronFillSprite->x = cauldronSprite->x;
+  cauldronFillSprite->y = cauldronSprite->y;
 
   // position the spellbook above the cauldron
   spellbookSprite->x = (SCREEN_WIDTH - spellbookSprite->src.w) / 2;
-  spellbookSprite->y = 100;
+  spellbookSprite->y = 133;
+
+  spellbookFillSprite->x = spellbookSprite->x;
+  spellbookFillSprite->y = spellbookSprite->y;
+
+  bookTableSprite->x = (SCREEN_WIDTH - bookTableSprite->src.w) / 2;
+  bookTableSprite->y = 136;
 
   // position the witch below the cauldron
   witchSprite->x = (SCREEN_WIDTH - witchSprite->src.w) / 2;
-  witchSprite->y = cauldronSprite->y + cauldronSprite->src.h - 20;
+  witchSprite->y = cauldronSprite->y + cauldronSprite->src.h - 16;
+
+  // position the potion table
+  potionTableSprite->x = (SCREEN_WIDTH - potionTableSprite->src.w) / 2;
+  potionTableSprite->y = SCREEN_HEIGHT - (potionTableSprite->src.h + 66);
 
   // position the potion bottles near the bottom of the screen
   for (int i = 0; i < 5; i += 1) {
     Sprite* sprite = potionSprite[i];
-    sprite->x = 24 + ((sprite->src.w + 8) * i);
-    sprite->y = SCREEN_HEIGHT - (sprite->src.h + 16);
+    sprite->x = 42 + ((sprite->src.w + 12) * i);
+    sprite->y = SCREEN_HEIGHT - (sprite->src.h + 91);
+
+    Sprite* bottle = potionBottleSprite[i];
+    bottle->x = sprite->x;
+    bottle->y = sprite->y;
 
     // initialize the potion bottles with base colors
     Potion__init_sprite(sprite, basePotions[i]);
@@ -295,7 +352,7 @@ void enter_play_scene() {
   select_starting_cauldron_color();
 
   Potion* cauldronPotion = allPotions[cauldronColor];
-  SDL_SetTextureColorMod(cauldronSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+  SDL_SetTextureColorMod(cauldronFillSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
 
   // start bgm
   // if (Mix_PlayMusic(bgm, -1) < 0) {
@@ -316,6 +373,23 @@ void update_play_scene(float dt) {
   Input* input = &currentGamePtr->inputs;
   Mouse* mouse = &currentGamePtr->mouse;
 
+  Sprite* mover = cauldronSprite;
+  if (input->down) {
+    mover->y += 1;
+    printf("Y = %d\n", (int)mover->y);
+  } else if (input->up) {
+    mover->y -= 1;
+    printf("Y = %d\n", (int)mover->y);
+  }
+  if (input->left) {
+    mover->x -= 1;
+    printf("X = %d\n", (int)mover->x);
+  } else if (input->right) {
+    mover->x += 1;
+    printf("X = %d\n", (int)mover->x);
+  }
+
+
   if (mouse->state == SDL_PRESSED && mouseDown == 0) {
     mouseDown = 1;
 
@@ -335,13 +409,11 @@ void update_play_scene(float dt) {
           selectedPotionIndex = -1;
           selectionSprite->x = -selectionSprite->src.w;
           selectionSprite->y = -selectionSprite->src.h;
-          // SDL_SetTextureColorMod(sprite->texture, 0xff, 0xff, 0xff);
         } else {
           selectedPotionIndex = i;
           selectionSprite->x = (sprite->x + (sprite->src.w / 2)) - (selectionSprite->src.w / 2);
           selectionSprite->y = (sprite->y + (sprite->src.h / 2)) - (selectionSprite->src.h / 2);
           Potion* potion = (Potion*)sprite->data;
-          // SDL_SetTextureColorMod(sprite->texture, potion->r, potion->g, potion->b);
         }
       }
     }
@@ -357,9 +429,11 @@ void update_play_scene(float dt) {
 
       if (cauldronColor == BAD_MIX) {
         printf("dumping failed mix from cauldron\n");
+        play_sfx(sfxPourPotion, 0.6f);
         cauldronColor = basePotions[startingCauldronColor]->id;
         Potion* cauldronPotion = allPotions[cauldronColor];
-        SDL_SetTextureColorMod(cauldronSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+        SDL_SetTextureColorMod(cauldronFillSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+        cauldronFillSprite->visible = SPRITE_VISIBLE;
       } else {
         // potion selected?
         if (selectedPotionIndex != -1) {
@@ -369,17 +443,31 @@ void update_play_scene(float dt) {
           // is the bottle empty?
           if (selectedPotionSprite->state == BOTTLE_EMPTY) {
             printf("filling selected empty potion bottle with cauldron color\n");
+            play_sfx(sfxPourPotion, 0.6f);
+            Potion* cauldronPotion = allPotions[cauldronColor];
+            SDL_SetTextureColorMod(selectedPotionSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+            selectedPotion->r = cauldronPotion->r;
+            selectedPotion->g = cauldronPotion->g;
+            selectedPotion->b = cauldronPotion->b;
+            selectedPotion->id = cauldronPotion->id;
+            selectedPotionSprite->visible = SPRITE_VISIBLE;
           } else {
             printf("adding selected potion to cauldron...\n");
+            selectedPotionSprite->state = BOTTLE_EMPTY;
+            selectedPotionSprite->visible = SPRITE_HIDDEN;
+            play_sfx(sfxPourPotion, 0.6f);
             int result = mix_colors(cauldronColor, selectedPotion->id);
             if (result != BAD_MIX) {
+              play_sfx(sfxMixSuccess, 0.8f);
               cauldronColor = result;
               Potion* cauldronPotion = allPotions[cauldronColor];
-              SDL_SetTextureColorMod(cauldronSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+              SDL_SetTextureColorMod(cauldronFillSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
               printf("SUCCESS! Got %d\n", result);
             } else {
+              play_sfx(sfxMixFailed, 0.8f);
               cauldronColor = BAD_MIX;
-              SDL_SetTextureColorMod(cauldronSprite->texture, 0xff, 0xff, 0xff);
+              cauldronFillSprite->visible = SPRITE_HIDDEN;
+              // SDL_SetTextureColorMod(cauldronFillSprite->texture, 0xff, 0xff, 0xff);
               printf("FAILED! click on cauldron to reset\n");
             }
           }
@@ -389,11 +477,13 @@ void update_play_scene(float dt) {
           selectionSprite->x = -selectionSprite->src.w;
           selectionSprite->y = -selectionSprite->src.h;
         } else {
+          play_sfx(sfxPourPotion, 0.6f);
           // no potion selected
           printf("resetting to starting base color\n");
           cauldronColor = basePotions[startingCauldronColor]->id;
           Potion* cauldronPotion = allPotions[cauldronColor];
-          SDL_SetTextureColorMod(cauldronSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+          SDL_SetTextureColorMod(cauldronFillSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+          cauldronFillSprite->visible = SPRITE_VISIBLE;
         }
       }
     }
@@ -401,6 +491,7 @@ void update_play_scene(float dt) {
     // clicked on spellbook?
     if (Sprite__collides_with_point(spellbookSprite, mouse->x, mouse->y)) {
       printf("clicked on spellbook\n");
+      play_sfx(sfxMenuClick, 0.5f);
     }
 
     // clicked on menu button?
@@ -463,6 +554,10 @@ Sprite* Sprite__init(Sprite* sprite, SDL_Texture* texture, SDL_Rect* src) {
 
 SDL_Rect dst;
 void Sprite__render(Sprite* sprite) {
+  if (sprite->visible == SPRITE_HIDDEN) {
+    return;
+  }
+
   dst.x = (int)sprite->x;
   dst.y = (int)sprite->y;
 
