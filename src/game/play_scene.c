@@ -28,14 +28,16 @@
 
   + click on a potion bottle to select it
   + click on a selected potion bottle to deselect it
+
   + click on cauldron to add selected potion to cauldron
   + click on cauldron with no potion selected to reset cauldron to starting base color
-  + click on witch with selected potion to empty selected potion bottle
   + click on cauldron with selected empty potion bottle to fill with cauldron color
+
+  + click on witch with selected potion to empty selected potion bottle
   + click on witch with no selected potion to reset all potion bottles to starting base colors
+
   + click on menu button to display pause menu [resume, guidebook, quit]
   + click on volume speaker icon to toggle audio on / off
-
  */
 
 SDL_Texture* bgTexture = 0;
@@ -80,15 +82,52 @@ void Potion__init_sprite(Sprite* sprite, Potion* potion) {
 }
 
 Potion blackPotion = { BLACK, 0x20, 0x20, 0x20 };
-Potion whitePotion = { WHITE, 0x20, 0x20, 0x20 };
-Potion redPotion = { RED, 0x20, 0x20, 0x20 };
-Potion greenPotion = { GREEN, 0x20, 0x20, 0x20 };
-Potion bluePotion = { BLUE, 0x20, 0x20, 0x20 };
-Potion yellowPotion = { YELLOW, 0x20, 0x20, 0x20 };
-Potion orangePotion = { ORANGE, 0x20, 0x20, 0x20 };
-Potion cyanPotion = { CYAN, 0x20, 0x20, 0x20 };
-Potion purplePotion = { PURPLE, 0x20, 0x20, 0x20 };
-Potion pinkPotion = { PINK, 0x20, 0x20, 0x20 };
+Potion whitePotion = { WHITE, 0xEA, 0xEA, 0xEA };
+Potion redPotion = { RED, 0xEA, 0x00, 0x00 };
+Potion greenPotion = { GREEN, 0x00, 0xEA, 0x00 };
+Potion bluePotion = { BLUE, 0x00, 0x00, 0xEA };
+Potion yellowPotion = { YELLOW, 0xEA, 0xEA, 0x00 };
+Potion orangePotion = { ORANGE, 0xEA, 0x80, 0x00 };
+Potion cyanPotion = { CYAN, 0x00, 0xEA, 0xEA };
+Potion purplePotion = { PURPLE, 0xA9, 0x00, 0xA9 };
+Potion pinkPotion = { PINK, 0xEA, 0x00, 0xEA };
+
+Potion* basePotions[] = {
+  &blackPotion,
+  &whitePotion,
+  &redPotion,
+  &greenPotion,
+  &bluePotion
+};
+
+Potion* allPotions[] = {
+  &blackPotion,
+  &whitePotion,
+  &redPotion,
+  &greenPotion,
+  &bluePotion,
+  &yellowPotion,
+  &orangePotion,
+  &cyanPotion,
+  &purplePotion,
+  &pinkPotion
+};
+
+int startingCauldronColors[] = {
+  BLACK,
+  WHITE,
+  RED,
+  GREEN,
+  BLUE
+};
+int startingCauldronColor = GREEN;
+int cauldronColor = GREEN;
+
+void select_starting_cauldron_color () {
+  int index = rand() % 5;
+  startingCauldronColor = startingCauldronColors[index];
+  cauldronColor = startingCauldronColor;
+}
 
 #define MAX_SPRITES 200
 Sprite sprites[MAX_SPRITES];
@@ -99,6 +138,9 @@ void Sprite__render(Sprite* sprite);
 int Sprite__collides_with_point(Sprite* sprite, int x, int y);
 
 int selectedPotionIndex = -1;
+
+#define BOTTLE_EMPTY 0
+#define BOTTLE_FULL 1
 
 #define AUDIO_UNMUTED 0
 #define AUDIO_MUTED 1
@@ -192,8 +234,10 @@ void enter_play_scene() {
     sprite->x = 24 + ((sprite->src.w + 8) * i);
     sprite->y = SCREEN_HEIGHT - (sprite->src.h + 16);
 
-    // initialize the potion bottles with black
-    Potion__init_sprite(sprite, &blackPotion);
+    // initialize the potion bottles with base colors
+    Potion__init_sprite(sprite, basePotions[i]);
+
+    sprite->state = BOTTLE_FULL;
   }
 
   // position the selection box off screen
@@ -208,6 +252,13 @@ void enter_play_scene() {
   audioSprite->x = SCREEN_WIDTH - (audioSprite->src.w + 10);
   audioSprite->y = 10;
   audioSprite->state = AUDIO_UNMUTED;
+
+
+  // init the cauldron
+  select_starting_cauldron_color();
+
+  Potion* cauldronPotion = allPotions[cauldronColor];
+  SDL_SetTextureColorMod(cauldronSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
 }
 
 void exit_play_scene() {
@@ -226,8 +277,9 @@ void update_play_scene(float dt) {
     for (int i = 0; i < 5; i += 1) {
       Sprite* sprite = potionSprite[i];
       if (Sprite__collides_with_point(sprite, mouse->x, mouse->y)) {
-        printf("clicked on potion %d\n", i);
-        SDL_SetTextureColorMod(sprite->texture, 0xff, 0xff, 0);
+        Potion* potion = sprite->data;
+        printf("clicked on potion bottle %d: key[%d] color (R 0x%02X, G 0x%02X, B 0x%02X)\n", i, potion->id, potion->r, potion->g, potion->b);
+
         // move witch in front of potion
         witchSprite->x = mouse->x - (witchSprite->src.w / 2);
 
@@ -236,27 +288,66 @@ void update_play_scene(float dt) {
           selectedPotionIndex = -1;
           selectionSprite->x = -selectionSprite->src.w;
           selectionSprite->y = -selectionSprite->src.h;
-          SDL_SetTextureColorMod(sprite->texture, 0xff, 0xff, 0xff);
+          // SDL_SetTextureColorMod(sprite->texture, 0xff, 0xff, 0xff);
         } else {
           selectedPotionIndex = i;
           selectionSprite->x = (sprite->x + (sprite->src.w / 2)) - (selectionSprite->src.w / 2);
           selectionSprite->y = (sprite->y + (sprite->src.h / 2)) - (selectionSprite->src.h / 2);
           Potion* potion = (Potion*)sprite->data;
-          SDL_SetTextureColorMod(sprite->texture, potion->r, potion->g, potion->b);
+          // SDL_SetTextureColorMod(sprite->texture, potion->r, potion->g, potion->b);
         }
       }
     }
 
     // clicked on cauldron?
-    if (Sprite__collides_with_point(cauldronSprite, mouse->x, mouse->y)) {
-      printf("clicked on cauldron\n");
 
-      // deselect potion if selected
-      if (selectedPotionIndex != -1) {
-        selectionSprite->x = -selectionSprite->src.w;
-        selectionSprite->y = -selectionSprite->src.h;
-        SDL_SetTextureColorMod(potionSprite[selectedPotionIndex]->texture, 0xff, 0xff, 0xff);
-        selectedPotionIndex = -1;
+    // + click on cauldron to add selected potion to cauldron
+    // + click on cauldron with no potion selected to reset cauldron to starting base color
+    // + click on cauldron with selected empty potion bottle to fill with cauldron color
+
+    if (Sprite__collides_with_point(cauldronSprite, mouse->x, mouse->y)) {
+      printf("clicked on cauldron: ");
+
+      if (cauldronColor == BAD_MIX) {
+        printf("dumping failed mix from cauldron\n");
+        cauldronColor = basePotions[startingCauldronColor]->id;
+        Potion* cauldronPotion = allPotions[cauldronColor];
+        SDL_SetTextureColorMod(cauldronSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+      } else {
+        // potion selected?
+        if (selectedPotionIndex != -1) {
+          Sprite* selectedPotionSprite = potionSprite[selectedPotionIndex];
+          Potion* selectedPotion = (Potion*)selectedPotionSprite->data;
+
+          // is the bottle empty?
+          if (selectedPotionSprite->state == BOTTLE_EMPTY) {
+            printf("filling selected empty potion bottle with cauldron color\n");
+          } else {
+            printf("adding selected potion to cauldron...\n");
+            int result = mix_colors(cauldronColor, selectedPotion->id);
+            if (result != BAD_MIX) {
+              cauldronColor = result;
+              Potion* cauldronPotion = allPotions[cauldronColor];
+              SDL_SetTextureColorMod(cauldronSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+              printf("SUCCESS! Got %d\n", result);
+            } else {
+              cauldronColor = BAD_MIX;
+              SDL_SetTextureColorMod(cauldronSprite->texture, 0xff, 0xff, 0xff);
+              printf("FAILED! click on cauldron to reset\n");
+            }
+          }
+
+          // deselect
+          selectedPotionIndex = -1;
+          selectionSprite->x = -selectionSprite->src.w;
+          selectionSprite->y = -selectionSprite->src.h;
+        } else {
+          // no potion selected
+          printf("resetting to starting base color\n");
+          cauldronColor = basePotions[startingCauldronColor]->id;
+          Potion* cauldronPotion = allPotions[cauldronColor];
+          SDL_SetTextureColorMod(cauldronSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
+        }
       }
     }
 

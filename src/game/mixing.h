@@ -17,6 +17,8 @@
 #define PURPLE 8
 #define PINK 9
 
+extern char* colorNames[10];
+
 /* returns BAD_MIX if the colors do not mix */
 int mix_colors(int color1, int color2);
 
