@@ -13,6 +13,8 @@ int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine) {
     return -1;
   }
 
+  srand(time(0));
+
   gamePtr->cmdLineCount = cmdLineCount;
   gamePtr->cmdLine = cmdLine;
   gamePtr->gameState = 1;
@@ -74,6 +76,11 @@ int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine) {
   int audioInit = Mix_Init(audioFlags);
   if ((audioInit & audioFlags) != audioFlags) {
     SDL_Log("Error occurred in init_game()\nUnable to init SDL mixer: %s\n", Mix_GetError());
+    return -1;
+  }
+
+  if (TTF_Init() == -1) {
+    SDL_Log("Error occurred in init_game()\nUnable to init SDL TTF: %s\n", TTF_GetError());
     return -1;
   }
 
