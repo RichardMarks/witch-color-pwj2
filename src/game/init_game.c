@@ -97,7 +97,7 @@ int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine) {
   currentScenePtr->update = &update_title_scene;
   currentScenePtr->render = &render_title_scene;
 
-#if 1
+#if 0
   currentScenePtr->id = 1;
   currentScenePtr->init = &init_play_scene;
   currentScenePtr->destroy = &destroy_play_scene;
