@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "game.h"
 #include "scenes.h"
+#include "dimmer.h"
 
 void destroy_game() {
    if (!currentGamePtr) {
@@ -11,6 +12,10 @@ void destroy_game() {
 
   /* do your game cleanup here */
   destroy_play_scene();
+  destroy_title_scene();
+  destroy_credits_scene();
+
+  destroy_dimmer();
 
   TTF_Quit();
 

@@ -5,7 +5,7 @@
   "tasks": [
     {
       "label": "dev",
-      "type": "process",
+      "type": "shell",
       "group": "build",
       "command": "${workspaceFolder}/dev",
       "problemMatcher": []

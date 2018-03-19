@@ -1,7 +1,66 @@
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "game.h"
 #include "scenes.h"
 #include "mixing.h"
 #include "text_renderer.h"
+#include "dimmer.h"
+#include "sprite.h"
+#include "xorshift.h"
+
+typedef struct t_PaletteEntry {
+  int id;
+  unsigned char unlocked;
+} PaletteEntry;
+
+#define MAX_PALETTE 36
+PaletteEntry bookPalette[MAX_PALETTE];
+
+void unlock_color(int id) {
+  PaletteEntry* entry = &bookPalette[id - 1];
+  entry->id = id;
+  entry->unlocked = 1;
+}
+
+void save_state() {
+  FILE* fp = fopen("witchcolor.state", "wb");
+  if (fp) {
+    for (int i = 0; i < MAX_PALETTE; i += 1) {
+      fwrite(&bookPalette[i].unlocked, sizeof(unsigned char), 1, fp);
+    }
+    fclose(fp);
+  } else {
+    printf("Error occurred in save_state()\nUnable to save the game state!\n");
+  }
+}
+
+void load_state() {
+  FILE* fp = fopen("witchcolor.state", "rb");
+  if (fp) {
+    unsigned char unlocked;
+    for (int i = 0; i < MAX_PALETTE; i += 1) {
+      fread(&unlocked, sizeof(unsigned char), 1, fp);
+      bookPalette[i].unlocked = unlocked;
+    }
+    fclose(fp);
+  } else {
+    printf("Error occurred in load_state()\nUnable to load the game state!\n");
+  }
+}
+
+int menuOpen = 0;
+
+int bookOpen = 0;
+#define BOOK_PALETTE_PAGE 0
+#define BOOK_DETAIL_PAGE 1
+int bookPage = BOOK_PALETTE_PAGE;
+int bookSelectedIndex = -1;
+
+void open_book();
+void close_book();
+void update_book(float dt);
+void render_book();
 
 TTF_Font* targetColorFont = 0;
 TTF_Font* selectedPotionFont = 0;
@@ -14,6 +73,7 @@ TTF_Font* mixedColorFont = 0;
 Text* targetColorText = 0;
 Text* mixedColorText = 0;
 Text* selectedPotionText = 0;
+Text* selectedSwatchText = 0;
 
 Mix_Music* bgm = 0;
 Mix_Chunk* sfxWitchMove = 0;
@@ -52,20 +112,14 @@ SDL_Texture* potionBottleTexture = 0;
 SDL_Texture* magicCircleTexture = 0;
 SDL_Texture* magicCircleBlurTexture = 0;
 
-#define SPRITE_VISIBLE 0x00
-#define SPRITE_HIDDEN 0xFF
-
-typedef struct t_Sprite {
-  float x;
-  float y;
-  float xv;
-  float yv;
-  void* data;
-  int state;
-  SDL_Texture* texture;
-  SDL_Rect src;
-  unsigned char visible;
-} Sprite;
+SDL_Texture* bookCloseButtonTexture = 0;
+SDL_Texture* bookPageTexture = 0;
+SDL_Texture* bookDecorationTexture = 0;
+SDL_Texture* bookViewButtonTexture = 0;
+SDL_Texture* bookFillButtonTexture = 0;
+SDL_Texture* bookSelectedColorTexture = 0;
+SDL_Texture* bookSwatchTexture[MAX_PALETTE];
+SDL_Texture* bookSwatchLockTexture = 0;
 
 typedef struct t_Potion {
   int id;
@@ -215,21 +269,43 @@ int mixableColors[] = {
 
 int spellbookColor = FEDORA;
 void select_spellbook_color () {
-  int index = WHITE + (rand() % (CRETE - WHITE));
-  spellbookColor = mixableColors[index];
+  int mini = mixableColors[1];
+  int maxi = mixableColors[29];
+
+  int index = rng_random(mini, maxi);
+  spellbookColor = mixableColors[index - (mini - 1)];
+  while (bookPalette[spellbookColor].unlocked) {
+    index = rng_random(mini, maxi);
+    spellbookColor = mixableColors[index - (mini - 1)];
+  }
 }
 
 void select_starting_cauldron_color () {
-  int index = rand() % 7;
-  startingCauldronColor = startingCauldronColors[index];
-  cauldronColor = startingCauldronColor;
+  // int index = rand() % 7;
+  // startingCauldronColor = startingCauldronColors[index];
+  // cauldronColor = startingCauldronColor;
 }
 
-#define MAX_SPRITES 200
+#define MAX_SPRITES 400
 Sprite sprites[MAX_SPRITES];
 int numSprites = 0;
 
-Sprite* Sprite__init(Sprite* sprite, SDL_Texture* texture, SDL_Rect* src);
+
+#define MAX_LAYERS 3 // BG, FG, UI
+#define BG_LAYER 0
+#define FG_LAYER 1
+#define UI_LAYER 2
+Sprite* spriteLayer[MAX_LAYERS][MAX_SPRITES];
+int numSpritesByLayer[MAX_LAYERS] = { 0 };
+
+void add_sprite_to_layer(Sprite* sprite, int layer) {
+  sprite->layer = layer;
+  spriteLayer[layer][numSpritesByLayer[layer]] = sprite;
+  numSpritesByLayer[layer] += 1;
+}
+
+
+Sprite* Sprite__init(Sprite* sprite, SDL_Texture* texture, SDL_Rect* src, int layer);
 void Sprite__render(Sprite* sprite);
 int Sprite__collides_with_point(Sprite* sprite, int x, int y);
 void Sprite__change_texture(Sprite* sprite, SDL_Texture* texture, SDL_Rect* src);
@@ -256,6 +332,21 @@ Sprite* bookTableSprite = 0;
 Sprite* potionTableSprite = 0;
 
 Sprite* potionBottleSprite[] = { 0, 0, 0, 0, 0, 0, 0 };
+
+Sprite* bookCloseButtonSprite = 0;
+Sprite* bookViewButtonSprite = 0;
+Sprite* bookFillButtonSprite = 0;
+Sprite* bookSelectedColorSprite = 0;
+Sprite* bookSwatchSprite[MAX_PALETTE];
+
+// all set during init
+#define PALETTE_COLUMNS 6
+int paletteSpaceX = 0;
+int paletteSpaceY = 0;
+int swatchWidth = 0;
+int swatchHeight = 0;
+int paletteOffsetX = 0;
+int paletteOffsetY = 0;
 
 void mute_audio () {
   audioSprite->state = AUDIO_MUTED;
@@ -382,6 +473,18 @@ void init_play_scene() {
   cauldronFillTexture = load_texture("../data/sprites/CauldronFill.png");
   potionBottleTexture = load_texture("../data/sprites/BottleEmpty.png");
 
+  bookCloseButtonTexture = load_texture("../data/ui/Close.png");
+  bookPageTexture = load_texture("../data/ui/Page.png");
+  bookDecorationTexture = load_texture("../data/ui/Decoration.png");
+  bookViewButtonTexture = load_texture("../data/ui/View.png");
+  bookFillButtonTexture = load_texture("../data/ui/Fill.png");
+  bookSelectedColorTexture = load_texture("../data/ui/SelectedColor.png");
+  for (int i = 0; i < MAX_PALETTE; i += 1) {
+    bookSwatchTexture[i] = load_texture("../data/ui/SwatchFill.png");
+  }
+
+  bookSwatchLockTexture = load_texture("../data/ui/Lock.png");
+
   magicCircleTexture = load_texture("../data/sprites/magic_circle.png");
   magicCircleBlurTexture = load_texture("../data/sprites/magic_circle_blurred.png");
 
@@ -391,43 +494,67 @@ void init_play_scene() {
   targetColorText = Text__create(targetColorFont, 0xFFFFFFFF);
   mixedColorText = Text__create(mixedColorFont, 0xFFFFFFFF);
   selectedPotionText = Text__create(selectedPotionFont, 0xFFFFFFFF);
+  selectedSwatchText = Text__create(targetColorFont, 0xFFFFFFFF);
 
   // printf("init sprites\n");
   // initialize sprites
   numSprites = 0;
-  Sprite__init(&sprites[numSprites], bgTexture, 0); numSprites += 1;
+  Sprite__init(&sprites[numSprites], bgTexture, 0, BG_LAYER); numSprites += 1;
 
-  bookTableSprite = Sprite__init(&sprites[numSprites], potionTableTexture, 0); numSprites += 1;
-  spellbookSprite = Sprite__init(&sprites[numSprites], spellbookTexture, 0); numSprites += 1;
-  spellbookFillSprite = Sprite__init(&sprites[numSprites], bookTargetTexture, 0); numSprites += 1;
+  bookTableSprite = Sprite__init(&sprites[numSprites], potionTableTexture, 0, BG_LAYER); numSprites += 1;
+  spellbookSprite = Sprite__init(&sprites[numSprites], spellbookTexture, 0, FG_LAYER); numSprites += 1;
+  spellbookFillSprite = Sprite__init(&sprites[numSprites], bookTargetTexture, 0, FG_LAYER); numSprites += 1;
 
-  cauldronSprite = Sprite__init(&sprites[numSprites], cauldronTexture, 0); numSprites += 1;
-  cauldronFillSprite = Sprite__init(&sprites[numSprites], cauldronFillTexture, 0); numSprites += 1;
+  cauldronSprite = Sprite__init(&sprites[numSprites], cauldronTexture, 0, FG_LAYER); numSprites += 1;
+  cauldronFillSprite = Sprite__init(&sprites[numSprites], cauldronFillTexture, 0, FG_LAYER); numSprites += 1;
 
-  witchSprite = Sprite__init(&sprites[numSprites], witchTexture1, 0); numSprites += 1;
+  witchSprite = Sprite__init(&sprites[numSprites], witchTexture1, 0, FG_LAYER); numSprites += 1;
 
-  potionTableSprite = Sprite__init(&sprites[numSprites], potionTableTexture, 0); numSprites += 1;
+  potionTableSprite = Sprite__init(&sprites[numSprites], potionTableTexture, 0, BG_LAYER); numSprites += 1;
 
-  potionBottleSprite[0] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
-  potionBottleSprite[1] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
-  potionBottleSprite[2] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
-  potionBottleSprite[3] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
-  potionBottleSprite[4] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
-  potionBottleSprite[5] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
-  potionBottleSprite[6] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0); numSprites += 1;
+  potionBottleSprite[0] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0, FG_LAYER); numSprites += 1;
+  potionBottleSprite[1] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0, FG_LAYER); numSprites += 1;
+  potionBottleSprite[2] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0, FG_LAYER); numSprites += 1;
+  potionBottleSprite[3] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0, FG_LAYER); numSprites += 1;
+  potionBottleSprite[4] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0, FG_LAYER); numSprites += 1;
+  potionBottleSprite[5] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0, FG_LAYER); numSprites += 1;
+  potionBottleSprite[6] = Sprite__init(&sprites[numSprites], potionBottleTexture, 0, FG_LAYER); numSprites += 1;
 
-  potionSprite[0] = Sprite__init(&sprites[numSprites], potionTexture1, 0); numSprites += 1;
-  potionSprite[1] = Sprite__init(&sprites[numSprites], potionTexture2, 0); numSprites += 1;
-  potionSprite[2] = Sprite__init(&sprites[numSprites], potionTexture3, 0); numSprites += 1;
-  potionSprite[3] = Sprite__init(&sprites[numSprites], potionTexture4, 0); numSprites += 1;
-  potionSprite[4] = Sprite__init(&sprites[numSprites], potionTexture5, 0); numSprites += 1;
-  potionSprite[5] = Sprite__init(&sprites[numSprites], potionTexture6, 0); numSprites += 1;
-  potionSprite[6] = Sprite__init(&sprites[numSprites], potionTexture7, 0); numSprites += 1;
+  potionSprite[0] = Sprite__init(&sprites[numSprites], potionTexture1, 0, FG_LAYER); numSprites += 1;
+  potionSprite[1] = Sprite__init(&sprites[numSprites], potionTexture2, 0, FG_LAYER); numSprites += 1;
+  potionSprite[2] = Sprite__init(&sprites[numSprites], potionTexture3, 0, FG_LAYER); numSprites += 1;
+  potionSprite[3] = Sprite__init(&sprites[numSprites], potionTexture4, 0, FG_LAYER); numSprites += 1;
+  potionSprite[4] = Sprite__init(&sprites[numSprites], potionTexture5, 0, FG_LAYER); numSprites += 1;
+  potionSprite[5] = Sprite__init(&sprites[numSprites], potionTexture6, 0, FG_LAYER); numSprites += 1;
+  potionSprite[6] = Sprite__init(&sprites[numSprites], potionTexture7, 0, FG_LAYER); numSprites += 1;
 
-  selectionSprite = Sprite__init(&sprites[numSprites], selectionTexture, 0); numSprites += 1;
+  selectionSprite = Sprite__init(&sprites[numSprites], selectionTexture, 0, FG_LAYER); numSprites += 1;
 
-  menuButtonSprite = Sprite__init(&sprites[numSprites], menuButtonTexture, 0); numSprites += 1;
-  audioSprite = Sprite__init(&sprites[numSprites], audioUnmutedTexture, 0); numSprites += 1;
+  menuButtonSprite = Sprite__init(&sprites[numSprites], menuButtonTexture, 0, FG_LAYER); numSprites += 1;
+  audioSprite = Sprite__init(&sprites[numSprites], audioUnmutedTexture, 0, FG_LAYER); numSprites += 1;
+
+  // for (int i = 0; i < MAX_PALETTE; i += 1) {
+  //   if (i < 7) {
+  //     unlock_color(i + 1);
+  //   }
+  // }
+
+  load_state();
+
+  bookCloseButtonSprite = Sprite__init(&sprites[numSprites], bookCloseButtonTexture, 0, UI_LAYER); numSprites += 1;
+  bookViewButtonSprite = Sprite__init(&sprites[numSprites], bookViewButtonTexture, 0, UI_LAYER); numSprites += 1;
+  bookFillButtonSprite = Sprite__init(&sprites[numSprites], bookFillButtonTexture, 0, UI_LAYER); numSprites += 1;
+  bookSelectedColorSprite = Sprite__init(&sprites[numSprites], bookSelectedColorTexture, 0, UI_LAYER); numSprites += 1;
+  for (int i = 0; i < MAX_PALETTE; i += 1) {
+    PaletteEntry* entry = &bookPalette[i];
+    bookSwatchSprite[i] = Sprite__init(&sprites[numSprites], bookSwatchTexture[i], 0, UI_LAYER); numSprites += 1;
+    bookSwatchSprite[i]->texture2 = bookSwatchLockTexture;
+    bookSwatchSprite[i]->frame = !entry->unlocked ? 1 : 0;
+    // TODO: remove from game -- this unlocks all colors!
+    if (i < 7) {
+      unlock_color(i + 1);
+    }
+  }
 }
 
 void destroy_play_scene() {
@@ -435,6 +562,7 @@ void destroy_play_scene() {
   Text__destroy(targetColorText);
   Text__destroy(mixedColorText);
   Text__destroy(selectedPotionText);
+  Text__destroy(selectedSwatchText);
   // printf("destroying music\n");
   kill_music(bgm);
   // printf("destroying textures\n");
@@ -459,6 +587,16 @@ void destroy_play_scene() {
   kill_texture(potionBottleTexture);
   kill_texture(magicCircleTexture);
   kill_texture(magicCircleBlurTexture);
+  kill_texture(bookCloseButtonTexture);
+  kill_texture(bookDecorationTexture);
+  kill_texture(bookFillButtonTexture);
+  kill_texture(bookViewButtonTexture);
+  kill_texture(bookPageTexture);
+  kill_texture(bookSelectedColorTexture);
+  for (int i = 0; i < MAX_PALETTE; i += 1) {
+    kill_texture(bookSwatchTexture[i]);
+  }
+  kill_texture(bookSwatchLockTexture);
   // printf("destroying sfx\n");
   kill_sfx(sfxWitchMove);
   kill_sfx(sfxMixFailed);
@@ -475,6 +613,7 @@ void destroy_play_scene() {
 }
 
 void enter_play_scene() {
+  printf("entering play scene\n");
   init_magic_circle();
   // position the cauldron in the center of the screen
   cauldronSprite->x = (SCREEN_WIDTH - cauldronSprite->src.w) / 2;
@@ -535,13 +674,51 @@ void enter_play_scene() {
   selectionSprite->y = -selectionSprite->src.h;
 
   // position menu button
-  menuButtonSprite->x = 10;
+  menuButtonSprite->x = 24;
   menuButtonSprite->y = 10;
 
   // position audio toggle
-  audioSprite->x = SCREEN_WIDTH - (audioSprite->src.w + 10);
+  audioSprite->x = SCREEN_WIDTH - (audioSprite->src.w + 24);
   audioSprite->y = 10;
   audioSprite->state = AUDIO_UNMUTED;
+
+  // position the open book page sprites
+
+  bookSelectedColorSprite->x = (SCREEN_WIDTH - bookSelectedColorSprite->src.w) / 2;
+  bookSelectedColorSprite->y = 72;
+
+  bookViewButtonSprite->y = bookSelectedColorSprite->y + (bookSelectedColorSprite->src.h / 2) - 4;
+  bookViewButtonSprite->x = 28;
+
+  bookFillButtonSprite->y = bookViewButtonSprite->y;
+  bookFillButtonSprite->x = SCREEN_WIDTH - (bookFillButtonSprite->src.w + 38);
+
+  bookCloseButtonSprite->x = audioSprite->x;
+  bookCloseButtonSprite->y = audioSprite->y + audioSprite->src.h + 14;
+
+  paletteSpaceX = 8;
+  paletteSpaceY = 8;
+  swatchWidth = (bookSwatchSprite[0]->src.w + paletteSpaceX);
+  swatchHeight = (bookSwatchSprite[0]->src.h + paletteSpaceY);
+
+  paletteOffsetX = (SCREEN_WIDTH - (PALETTE_COLUMNS * swatchWidth)) / 2;
+  paletteOffsetY = bookSelectedColorSprite->y + bookSelectedColorSprite->src.h + 52;
+  for (int i = 0; i < MAX_PALETTE; i += 1) {
+    Sprite* sprite = bookSwatchSprite[i];
+    int column = i % PALETTE_COLUMNS;
+    int row = i / PALETTE_COLUMNS;
+    sprite->x = paletteOffsetX + (column * swatchWidth);
+    sprite->y = paletteOffsetY + (row * swatchHeight);
+    // sprite->visible = SPRITE_HIDDEN;
+    Potion* potion = allPotions[1 + i];
+    SDL_SetTextureColorMod(sprite->texture, potion->r, potion->g, potion->b);
+    sprite->data = potion;
+  }
+
+  SDL_SetTextureColorMod(bookSelectedColorSprite->texture, allPotions[1]->r, allPotions[1]->g, allPotions[1]->b);
+
+
+  // end open book page sprites
 
   // init the spellbook
   select_spellbook_color();
@@ -552,6 +729,31 @@ void enter_play_scene() {
   cauldronColor = BAD_MIX;
   cauldronFillSprite->visible = SPRITE_HIDDEN;
 
+  // init the text objects
+  //void Text__set_text(Text* ptr, char* text);
+  Text__set_text(targetColorText, colorNames[spellbookColor]);
+  Text__set_text(mixedColorText, "");
+  Text__set_text(selectedPotionText, "");
+  targetColorText->x = SCREEN_WIDTH / 2;
+  targetColorText->y = spellbookSprite->y - 14;
+
+  selectedPotionText->x = SCREEN_WIDTH / 2;
+  selectedPotionText->y = SCREEN_HEIGHT - 44;
+
+  mixedColorText->x = SCREEN_WIDTH / 2;
+  mixedColorText->y = cauldronSprite->y - 32;
+
+  Text__set_text(selectedSwatchText, colorNames[allPotions[1]->id]);
+  selectedSwatchText->x = SCREEN_WIDTH / 2;
+  selectedSwatchText->y = paletteOffsetY - 24;
+
+  // Text__set_text(targetColorText, colorNames[spellbookColor]);
+  // Text__set_text(mixedColorText, colorNames[result]);
+  // Text__set_text(selectedPotionText, colorNames[potion->id]);
+
+  // ensure book elements are not visible
+  close_book();
+
   // start bgm
   int bgmVolume = (int)(0.25f * 128.0f);
   Mix_VolumeMusic(bgmVolume);
@@ -560,31 +762,31 @@ void enter_play_scene() {
     return;
   }
 
-  // init the text objects
-  //void Text__set_text(Text* ptr, char* text);
-  Text__set_text(targetColorText, colorNames[spellbookColor]);
-  Text__set_text(mixedColorText, "");
-  Text__set_text(selectedPotionText, "");
-  targetColorText->x = SCREEN_WIDTH / 2;
-  targetColorText->y = spellbookSprite->y - 40;
-
-  selectedPotionText->x = SCREEN_WIDTH / 2;
-  selectedPotionText->y = SCREEN_HEIGHT - 44;
-
-  mixedColorText->x = SCREEN_WIDTH / 2;
-  mixedColorText->y = cauldronSprite->y - 32;
-  // Text__set_text(targetColorText, colorNames[spellbookColor]);
-  // Text__set_text(mixedColorText, colorNames[result]);
-  // Text__set_text(selectedPotionText, colorNames[potion->id]);
+  unmute_audio();
 }
 
 void exit_play_scene() {
-
+  Mix_PauseMusic();
+  Mix_Pause(-1);
+  currentScenePtr->id = 0;
+  currentScenePtr->init = &init_title_scene;
+  currentScenePtr->destroy = &destroy_title_scene;
+  currentScenePtr->enter = &enter_title_scene;
+  currentScenePtr->exit = &exit_title_scene;
+  currentScenePtr->update = &update_title_scene;
+  currentScenePtr->render = &render_title_scene;
+  currentScenePtr->enter();
 }
 
 float selectionTime = 0.0f;
 int mouseDown = 0;
 void update_play_scene(float dt) {
+  if (bookOpen) {
+    update_book(dt);
+    return;
+  } else if (menuOpen) {
+    return;
+  }
   Input* input = &currentGamePtr->inputs;
   Mouse* mouse = &currentGamePtr->mouse;
 
@@ -740,11 +942,23 @@ void update_play_scene(float dt) {
               SDL_SetTextureColorMod(cauldronFillSprite->texture, cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
               printf("SUCCESS! Got %s\n", colorNames[result]);
 
+              if (!bookPalette[result - 1].unlocked) {
+                unlock_color(result);
+                save_state();
+              }
+
               Text__set_text(mixedColorText, colorNames[result]);
               show_magic_circle(cauldronPotion->r, cauldronPotion->g, cauldronPotion->b);
 
               if (result == spellbookColor) {
                 printf("\nCREATED %s! CLEARED LEVEL!\n", colorNames[result]);
+                bookSwatchSprite[result - 1]->frame = 0;
+                select_spellbook_color();
+                Potion* bookPotion = allPotions[spellbookColor];
+                SDL_SetTextureColorMod(spellbookFillSprite->texture, bookPotion->r, bookPotion->g, bookPotion->b);
+                cauldronColor = BAD_MIX;
+                cauldronFillSprite->visible = SPRITE_HIDDEN;
+                Text__set_text(targetColorText, colorNames[spellbookColor]);
               }
             } else {
               play_sfx(sfxMixFailed, 0.8f);
@@ -774,12 +988,16 @@ void update_play_scene(float dt) {
     // clicked on spellbook?
     if (Sprite__collides_with_point(spellbookSprite, mouse->x, mouse->y)) {
       printf("clicked on spellbook\n");
+      open_book();
       play_sfx(sfxMenuClick, 0.5f);
     }
 
     // clicked on menu button?
     if (Sprite__collides_with_point(menuButtonSprite, mouse->x, mouse->y)) {
-      printf("TODO: show pause menu\n");
+      // printf("TODO: show pause menu\n");
+      // show_dimmer(0.7f);
+      save_state();
+      exit_play_scene();
       play_sfx(sfxMenuClick, 0.5f);
     }
 
@@ -810,21 +1028,41 @@ void update_play_scene(float dt) {
 }
 
 void render_play_scene() {
-  for (int i = 0; i < numSprites; i += 1) {
-    Sprite* sprite = &sprites[i];
+  for (int i = 0; i < numSpritesByLayer[BG_LAYER]; i += 1) {
+    Sprite* sprite = spriteLayer[BG_LAYER][i];
     Sprite__render(sprite);
   }
+
+  for (int i = 0; i < numSpritesByLayer[FG_LAYER]; i += 1) {
+    Sprite* sprite = spriteLayer[FG_LAYER][i];
+    Sprite__render(sprite);
+  }
+
+  // for (int i = 0; i < numSprites; i += 1) {
+  //   Sprite* sprite = &sprites[i];
+  //   Sprite__render(sprite);
+  // }
 
   render_magic_circle();
 
   Text__render(targetColorText);
   Text__render(mixedColorText);
   Text__render(selectedPotionText);
+
+  render_book();
+  for (int i = 0; i < numSpritesByLayer[UI_LAYER]; i += 1) {
+    Sprite* sprite = spriteLayer[UI_LAYER][i];
+    Sprite__render(sprite);
+  }
 }
 
-Sprite* Sprite__init(Sprite* sprite, SDL_Texture* texture, SDL_Rect* src) {
+Sprite* Sprite__init(Sprite* sprite, SDL_Texture* texture, SDL_Rect* src, int layer) {
   memset(sprite, 0, sizeof(Sprite));
   sprite->texture = texture;
+
+  sprite->frame = 0;
+  sprite->texture2 = 0;
+  sprite->visible = SPRITE_VISIBLE;
 
   if (src) {
     sprite->src.x = src->x;
@@ -840,7 +1078,13 @@ Sprite* Sprite__init(Sprite* sprite, SDL_Texture* texture, SDL_Rect* src) {
     sprite->src.h = h;
   }
 
+  add_sprite_to_layer(sprite, layer);
+
   return sprite;
+}
+
+void Sprite__change_texture2(Sprite* sprite, SDL_Texture* texture, SDL_Rect* src) {
+  sprite->frame = 1;
 }
 
 void Sprite__change_texture(Sprite* sprite, SDL_Texture* texture, SDL_Rect* src) {
@@ -869,12 +1113,24 @@ void Sprite__render(Sprite* sprite) {
   dst.x = (int)sprite->x;
   dst.y = (int)sprite->y;
 
-  int w, h;
-  SDL_QueryTexture(sprite->texture, 0, 0, &w, &h);
+  SDL_Texture* texture = sprite->frame ? sprite->texture2 : sprite->texture;
+  texture = !texture ? sprite->texture : texture;
 
-  dst.w = w;
-  dst.h = h;
-  SDL_RenderCopy(mainRendererPtr, sprite->texture, &sprite->src, &dst);
+  int w, h;
+  SDL_QueryTexture(texture, 0, 0, &w, &h);
+
+  sprite->src.x = 0;
+  sprite->src.y = 0;
+  sprite->src.w = w;
+  sprite->src.h = h;
+
+  dst.w = sprite->frame ? w / 2 : w;
+  dst.h = sprite->frame ? h / 2 : h;
+  if (sprite->frame) {
+    dst.x += dst.w / 2;
+    dst.y += dst.h / 2;
+  }
+  SDL_RenderCopy(mainRendererPtr, texture, &sprite->src, &dst);
 }
 
 int Sprite__collides_with_point(Sprite* sprite, int x, int y) {
@@ -886,41 +1142,124 @@ int Sprite__collides_with_point(Sprite* sprite, int x, int y) {
   return 0;
 }
 
+void open_book () {
+  bookOpen = 1;
+  bookCloseButtonSprite->visible = SPRITE_VISIBLE;
+  bookSelectedColorSprite->visible = SPRITE_VISIBLE;
+  bookViewButtonSprite->visible = SPRITE_VISIBLE;
+  bookFillButtonSprite->visible = SPRITE_VISIBLE;
+  for (int i = 0; i < MAX_PALETTE; i += 1) {
+    bookSwatchSprite[i]->visible = SPRITE_VISIBLE;
+  }
+}
 
-/*
+void close_book () {
+  bookOpen = 0;
+  bookCloseButtonSprite->visible = SPRITE_HIDDEN;
+  bookSelectedColorSprite->visible = SPRITE_HIDDEN;
+  bookViewButtonSprite->visible = SPRITE_HIDDEN;
+  bookFillButtonSprite->visible = SPRITE_HIDDEN;
+  for (int i = 0; i < MAX_PALETTE; i += 1) {
+    bookSwatchSprite[i]->visible = SPRITE_HIDDEN;
+  }
+}
 
-  ## BASE COLORS
+void update_book(float dt) {
+  if (!bookOpen) {
+    return;
+  }
 
-  + black
-  + white
-  + red
-  + green
-  + blue
+  Input* input = &currentGamePtr->inputs;
+  Mouse* mouse = &currentGamePtr->mouse;
 
-  ## MIXING COLORS
+  int clicked = 0;
+  if (mouse->state == SDL_PRESSED && mouseDown == 0) {
+    mouseDown = 1;
+    clicked = 1;
+  } else if (mouse->state != SDL_PRESSED && mouseDown == 1) {
+    mouseDown = 0;
+    clicked = 0;
+  }
 
-  + mixed color = [mixed color | base color] + [mixed color | base color]
-  + every color has a unique id integer
-  + define mixed colors by giving the id numbers of the two parts and id of the resulting mixed color
+  if (!clicked) {
+    return;
+  }
 
-  ## STARTUP
+  if (bookPage == BOOK_PALETTE_PAGE) {
+    // clicked on view button?
+    if (Sprite__collides_with_point(bookViewButtonSprite, mouse->x, mouse->y)) {
+      printf("TODO: implement book detail page\n");
+    } else if (Sprite__collides_with_point(bookFillButtonSprite, mouse->x, mouse->y)) {
+      // clicked on apply button?
+      // fill cauldron with selected color
+      Potion* potion = (Potion*)bookSelectedColorSprite->data;
+      potion = !potion ? allPotions[1] : potion;
+      printf("fill cauldron with color %s\n", colorNames[potion->id]);
+      play_sfx(sfxPourPotion, 0.6f);
+      cauldronColor = potion->id;
+      SDL_SetTextureColorMod(cauldronFillSprite->texture, potion->r, potion->g, potion->b);
+      cauldronFillSprite->visible = SPRITE_VISIBLE;
+      close_book();
+    } else if (Sprite__collides_with_point(bookCloseButtonSprite, mouse->x, mouse->y)) {
+      // clicked on close book button?
+      close_book();
+    } else {
+      // clicked on color swatch?
+      for (int i = 0; i < MAX_PALETTE; i += 1) {
+        Sprite* swatch = bookSwatchSprite[i];
+        if (Sprite__collides_with_point(swatch, mouse->x, mouse->y)) {
+          printf("clicked on swatch\n");
+          Potion* potion = (Potion*)swatch->data;
+          PaletteEntry* entry = &bookPalette[i];
+          if (entry->unlocked) {
+            printf("%s is unlocked\n", colorNames[potion->id]);
+            bookSelectedColorSprite->data = potion;
+            SDL_SetTextureColorMod(bookSelectedColorSprite->texture, potion->r, potion->g, potion->b);
+            bookSelectedIndex = i;
+            Text__set_text(selectedSwatchText, colorNames[potion->id]);
+          } else {
+            printf("%s is locked\n", colorNames[potion->id]);
+            Text__set_text(selectedSwatchText, "LOCKED");
+          }
+        }
+      }
+    }
+  } else if (bookPage == BOOK_DETAIL_PAGE) {
 
-  + cauldron starts with a random base color
-  + spellbook shows a random locked target color
-  + potion bottles start with base colors
+  }
+}
 
-  ## INTERACTIONS
+SDL_Rect bkSrc;
+SDL_Rect bkDst;
+void render_book() {
+  if (bookOpen) {
+    if (bookPage == BOOK_PALETTE_PAGE) {
+      int w, h;
+      SDL_QueryTexture(bookPageTexture, 0, 0, &w, &h);
+      bkSrc.x = 0;
+      bkSrc.y = 0;
+      bkSrc.w = w;
+      bkSrc.h = h;
+      bkDst.w = w;
+      bkDst.h = h;
+      bkDst.x = (SCREEN_WIDTH - w) / 2;
+      bkDst.y = 8 + ((SCREEN_HEIGHT - h) / 2);
+      SDL_RenderCopy(mainRendererPtr, bookPageTexture, &bkSrc, &bkDst);
 
-  + click on a potion bottle to select it
-  + click on a selected potion bottle to deselect it
+      SDL_QueryTexture(bookDecorationTexture, 0, 0, &w, &h);
+      bkSrc.x = 0;
+      bkSrc.y = 0;
+      bkSrc.w = w;
+      bkSrc.h = h;
+      bkDst.w = w;
+      bkDst.h = h;
+      bkDst.x = (SCREEN_WIDTH - w) / 2;
+      bkDst.y = bookSelectedColorSprite->y + (bookSelectedColorSprite->src.h - h);
+      SDL_RenderCopy(mainRendererPtr, bookDecorationTexture, &bkSrc, &bkDst);
 
-  + click on cauldron to add selected potion to cauldron
-  + click on cauldron with no potion selected to reset cauldron to starting base color
-  + click on cauldron with selected empty potion bottle to fill with cauldron color
+      Text__render(selectedSwatchText);
+    } else if (bookPage == BOOK_DETAIL_PAGE) {
 
-  + click on witch with selected potion to empty selected potion bottle
-  + click on witch with no selected potion to reset all potion bottles to starting base colors
-
-  + click on menu button to display pause menu [resume, guidebook, quit]
-  + click on volume speaker icon to toggle audio on / off
- */
+    }
+  }
+}

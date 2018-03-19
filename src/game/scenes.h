@@ -17,4 +17,13 @@ extern void exit_play_scene();
 extern void update_play_scene(float dt);
 extern void render_play_scene();
 
+extern void init_credits_scene();
+extern void destroy_credits_scene();
+extern void enter_credits_scene();
+extern void exit_credits_scene();
+extern void update_credits_scene(float dt);
+extern void render_credits_scene();
+
+extern Scene* currentScenePtr;
+
 #endif

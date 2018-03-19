@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "game.h"
 #include "scenes.h"
+#include "dimmer.h"
 
 static float epochTime() {
   return (float)SDL_GetTicks() * 0.001f;
@@ -41,7 +42,8 @@ int run_game(Game* gamePtr) {
       if (newTime - lastTime < 1) {
         deltaTime = (newTime - lastTime) * gamePtr->timeScale;
         /* update game here */
-        update_play_scene(deltaTime);
+        // update_play_scene(deltaTime);
+        currentScenePtr->update(deltaTime);
       }
       lastTime = newTime;
     }
@@ -50,7 +52,9 @@ int run_game(Game* gamePtr) {
       SDL_SetRenderDrawColor(mainRendererPtr, 0x00, 0x00, 0x00, 0xFF);
       SDL_RenderClear(mainRendererPtr);
       /* render game here */
-      render_play_scene();
+      // render_play_scene();
+      currentScenePtr->render();
+      render_dimmer();
       SDL_RenderPresent(mainRendererPtr);
     }
 

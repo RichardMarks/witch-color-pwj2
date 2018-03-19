@@ -2,10 +2,14 @@
 #include <stdlib.h>
 #include "game.h"
 #include "scenes.h"
+#include "dimmer.h"
 
 Game* currentGamePtr = NULL;
 SDL_Window* mainWindowPtr = NULL;
 SDL_Renderer* mainRendererPtr = NULL;
+
+Scene currentScene;
+Scene* currentScenePtr = NULL;
 
 int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine) {
   if (!gamePtr) {
@@ -84,20 +88,33 @@ int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine) {
     return -1;
   }
 
-  /* do your initialization here */
-  init_play_scene();
-  enter_play_scene();
+  currentScenePtr = &currentScene;
+  currentScenePtr->id = 0;
+  currentScenePtr->init = &init_title_scene;
+  currentScenePtr->destroy = &destroy_title_scene;
+  currentScenePtr->enter = &enter_title_scene;
+  currentScenePtr->exit = &exit_title_scene;
+  currentScenePtr->update = &update_title_scene;
+  currentScenePtr->render = &render_title_scene;
 
-#ifndef PRODUCTION
-  printf("executing init_game() -> currentGamePtr initialized.\n");
-  printf("Argument Count: %d\n", cmdLineCount);
-  printf("Arguments:\n");
-  int i = 0;
-  while (i < cmdLineCount) {
-    printf("  [%2d] = %s\n", i, cmdLine[i]);
-    i += 1;
-  }
-#endif
+  /* do your initialization here */
+  init_dimmer(0xFF000000);
+  init_title_scene();
+  init_credits_scene();
+  init_play_scene();
+  currentScenePtr->enter();
+  // enter_play_scene();
+
+// #ifndef PRODUCTION
+//   printf("executing init_game() -> currentGamePtr initialized.\n");
+//   printf("Argument Count: %d\n", cmdLineCount);
+//   printf("Arguments:\n");
+//   int i = 0;
+//   while (i < cmdLineCount) {
+//     printf("  [%2d] = %s\n", i, cmdLine[i]);
+//     i += 1;
+//   }
+// #endif
 
   return 0;
 }
