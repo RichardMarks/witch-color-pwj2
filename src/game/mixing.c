@@ -97,3 +97,18 @@ int mix_colors(int color1, int color2) {
 
   return BAD_MIX;
 }
+
+void get_parents(int color, int* parentA, int* parentB) {
+  *parentA = BAD_MIX;
+  *parentB = BAD_MIX;
+
+  int numCombinations = sizeof(combinationTable) / (3 * sizeof(int));
+  for (int i = 0; i < numCombinations * 3; i += 3) {
+    int child = combinationTable[i + 2];
+    if (child == color) {
+      *parentA = combinationTable[i + 0];
+      *parentB = combinationTable[i + 1];
+      return;
+    }
+  }
+}

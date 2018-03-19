@@ -74,6 +74,7 @@ Text* targetColorText = 0;
 Text* mixedColorText = 0;
 Text* selectedPotionText = 0;
 Text* selectedSwatchText = 0;
+Text* jamLimitText = 0;
 
 Mix_Music* bgm = 0;
 Mix_Chunk* sfxWitchMove = 0;
@@ -495,6 +496,7 @@ void init_play_scene() {
   mixedColorText = Text__create(mixedColorFont, 0xFFFFFFFF);
   selectedPotionText = Text__create(selectedPotionFont, 0xFFFFFFFF);
   selectedSwatchText = Text__create(targetColorFont, 0xFFFFFFFF);
+  jamLimitText = Text__create(mixedColorFont, 0xFFFFFFFF);
 
   // printf("init sprites\n");
   // initialize sprites
@@ -563,6 +565,7 @@ void destroy_play_scene() {
   Text__destroy(mixedColorText);
   Text__destroy(selectedPotionText);
   Text__destroy(selectedSwatchText);
+  Text__destroy(jamLimitText);
   // printf("destroying music\n");
   kill_music(bgm);
   // printf("destroying textures\n");
@@ -747,6 +750,10 @@ void enter_play_scene() {
   selectedSwatchText->x = SCREEN_WIDTH / 2;
   selectedSwatchText->y = paletteOffsetY - 24;
 
+  Text__set_text(jamLimitText, "Did not make it in!");
+  jamLimitText->x = SCREEN_WIDTH / 2;
+  jamLimitText->y = 40;
+
   // Text__set_text(targetColorText, colorNames[spellbookColor]);
   // Text__set_text(mixedColorText, colorNames[result]);
   // Text__set_text(selectedPotionText, colorNames[potion->id]);
@@ -777,6 +784,8 @@ void exit_play_scene() {
   currentScenePtr->render = &render_title_scene;
   currentScenePtr->enter();
 }
+
+int showJamLimit = 0;
 
 float selectionTime = 0.0f;
 int mouseDown = 0;
@@ -945,6 +954,12 @@ void update_play_scene(float dt) {
               if (!bookPalette[result - 1].unlocked) {
                 unlock_color(result);
                 save_state();
+                for (int j = 0; j < MAX_PALETTE; j += 1) {
+                  PaletteEntry* entry = &bookPalette[j];
+                  // bookSwatchSprite[i] = Sprite__init(&sprites[numSprites], bookSwatchTexture[i], 0, UI_LAYER); numSprites += 1;
+                  // bookSwatchSprite[i]->texture2 = bookSwatchLockTexture;
+                  bookSwatchSprite[j]->frame = !entry->unlocked ? 1 : 0;
+                }
               }
 
               Text__set_text(mixedColorText, colorNames[result]);
@@ -1188,7 +1203,8 @@ void update_book(float dt) {
   if (bookPage == BOOK_PALETTE_PAGE) {
     // clicked on view button?
     if (Sprite__collides_with_point(bookViewButtonSprite, mouse->x, mouse->y)) {
-      printf("TODO: implement book detail page\n");
+      // printf("TODO: implement book detail page\n");
+      showJamLimit = 1;
     } else if (Sprite__collides_with_point(bookFillButtonSprite, mouse->x, mouse->y)) {
       // clicked on apply button?
       // fill cauldron with selected color
@@ -1204,6 +1220,7 @@ void update_book(float dt) {
       // clicked on close book button?
       close_book();
     } else {
+      showJamLimit = 0;
       // clicked on color swatch?
       for (int i = 0; i < MAX_PALETTE; i += 1) {
         Sprite* swatch = bookSwatchSprite[i];
@@ -1258,6 +1275,9 @@ void render_book() {
       SDL_RenderCopy(mainRendererPtr, bookDecorationTexture, &bkSrc, &bkDst);
 
       Text__render(selectedSwatchText);
+      if (showJamLimit) {
+        Text__render(jamLimitText);
+      }
     } else if (bookPage == BOOK_DETAIL_PAGE) {
 
     }

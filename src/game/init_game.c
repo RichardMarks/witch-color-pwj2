@@ -97,6 +97,16 @@ int init_game(Game* gamePtr, int cmdLineCount, char** cmdLine) {
   currentScenePtr->update = &update_title_scene;
   currentScenePtr->render = &render_title_scene;
 
+#if 1
+  currentScenePtr->id = 1;
+  currentScenePtr->init = &init_play_scene;
+  currentScenePtr->destroy = &destroy_play_scene;
+  currentScenePtr->enter = &enter_play_scene;
+  currentScenePtr->exit = &exit_play_scene;
+  currentScenePtr->update = &update_play_scene;
+  currentScenePtr->render = &render_play_scene;
+#endif
+
   /* do your initialization here */
   init_dimmer(0xFF000000);
   init_title_scene();
