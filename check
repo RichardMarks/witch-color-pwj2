@@ -1,0 +1,31 @@
+#!/bin/bash
+CC_ERR="\x1b[31;4m"
+CC_OK="\x1b[32;1m"
+CC_RESET="\x1b[0m"
+
+L_DYLIBS=(
+  "/usr/local/opt/sdl2/lib/libSDL2-2.0.0.dylib"
+  "/usr/local/opt/sdl2_image/lib/libSDL2_image-2.0.0.dylib"
+  "/usr/local/opt/libpng/lib/libpng16.16.dylib"
+  "/usr/local/opt/jpeg/lib/libjpeg.9.dylib"
+  "/usr/local/opt/libtiff/lib/libtiff.5.dylib"
+  "/usr/local/opt/webp/lib/libwebp.7.dylib"
+  "/usr/local/opt/sdl2_ttf/lib/libSDL2_ttf-2.0.0.dylib"
+  "/usr/local/opt/freetype/lib/libfreetype.6.dylib"
+  "/usr/local/opt/sdl2_mixer/lib/libSDL2_mixer-2.0.0.dylib"
+  "/usr/local/opt/libmodplug/lib/libmodplug.1.dylib"
+  "/usr/local/opt/libvorbis/lib/libvorbisfile.3.dylib"
+  "/usr/local/opt/libvorbis/lib/libvorbis.0.dylib"
+)
+L_DEST="./dmg/dylibs/"
+
+function whatdoesitdependon () {
+  local l_arg1=$1
+  echo "${l_arg1} depends on..."
+}
+
+for i in ${L_DYLIBS[@]}; do
+  echo "copy from ${i} to ${L_DEST}"
+  # whatdoesitdependon `basename ${i}`
+  for x in ``
+done

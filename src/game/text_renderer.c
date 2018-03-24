@@ -64,9 +64,8 @@ Text* Text__init(Text* ptr, TTF_Font* font, unsigned int color) {
     ptr->pivotX = 0.5f;
     ptr->pivotY = 0.5f;
 
-    char* initialText = "";
-    ptr->text = (char*)malloc(sizeof(char) * strlen(initialText));
-    strcpy(ptr->text, initialText);
+    ptr->text = (char*)malloc(sizeof(char) * 1);
+    ptr->text[0] = '\0';
   }
   return ptr;
 }

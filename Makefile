@@ -1,6 +1,6 @@
 CC ?= gcc
-CFLAGS ?= $(shell pkg-config sdl2_image sdl2_ttf sdl2_mixer --cflags)
-LDFLAGS ?= $(shell pkg-config sdl2_image sdl2_ttf sdl2_mixer --libs)
+CFLAGS ?= $(shell pkg-config sdl2_image sdl2_ttf sdl2_mixer --cflags) -Os
+LDFLAGS ?= $(shell pkg-config sdl2_image sdl2_ttf sdl2_mixer --libs) -Wl,-headerpad_max_install_names
 
 TARGET_EXEC ?= witch-color
 BUILD_DIR ?= ./bin
@@ -10,8 +10,8 @@ OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)
 INC_DIRS := $(shell find $(SRC_DIRS) -type d)
 INC_FLAGS := $(addprefix -I,$(INC_DIRS))
-CPPFLAGS ?= $(INC_FLAGS) -MMD -MP -g -D DEBUG
-# CPPFLAGS ?= $(INC_FLAGS) -MMD -MP -D PRODUCTION
+# CPPFLAGS ?= $(INC_FLAGS) -MMD -MP -g -D DEBUG
+CPPFLAGS ?= $(INC_FLAGS) -MMD -MP -D PRODUCTION
 
 $(BUILD_DIR)/$(TARGET_EXEC): $(OBJS)
 	$(CC) $(OBJS) -o $@ $(LDFLAGS)
